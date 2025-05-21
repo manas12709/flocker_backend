@@ -10,8 +10,6 @@ from flask import current_app
 from werkzeug.security import generate_password_hash
 import shutil
 
-
-
 # import "objects" from "this" project
 from __init__ import app, db, login_manager  # Key Flask objects 
 # API endpoints
@@ -225,7 +223,7 @@ def restore_data_command():
     
 # Register the custom command group with the Flask application
 app.cli.add_command(custom_cli)
-        
+
 # this runs the flask application on the development server
 if __name__ == "__main__":
     # change name for testing
