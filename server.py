@@ -1,56 +1,73 @@
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, join_room, leave_room, send, emit
 from collections import defaultdict
+from datetime import datetime
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Track users per room and chat history
-rooms_users = defaultdict(set)
-chat_history = defaultdict(list)
+rooms_users = defaultdict(set)       # Track usernames per room
+chat_history = defaultdict(list)     # Track message history per room
+
 
 @app.route('/')
 def index():
-    return render_template('index.html')  # Make sure index.html is in a /templates folder
+    return render_template('index.html')
+
 
 @socketio.on('join')
 def handle_join(data):
     username = data.get('username')
     room = data.get('room')
+    sid = request.sid
 
     if not username or not room:
-        return  # Ignore invalid join attempts
+        return
 
     join_room(room)
     rooms_users[room].add(username)
 
-    # Send chat history to the user who joined
+    # Send chat history to new user
     for message in chat_history[room]:
-        emit('message', message, room=request.sid)
+        emit('message', message, room=sid)
 
-    # Notify others in the room
-    join_msg = f"{username} has joined the room."
-    chat_history[room].append(join_msg)
-    send(join_msg, room=room)
-
-    # Update the user list in the room
+    # Broadcast join event
+    join_message = {
+        "username": "System",
+        "text": f"{username} has joined the room.",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    chat_history[room].append(join_message)
+    emit('message', join_message, room=room)
     emit('user_list', list(rooms_users[room]), room=room)
+
 
 @socketio.on('message')
 def handle_message(data):
+    username = data.get('username')
     room = data.get('room')
-    msg = data.get('msg')
+    text = data.get('text')
 
-    if not room or not msg:
-        return  # Ignore invalid messages
+    if not all([username, room, text]):
+        return
 
-    chat_history[room].append(msg)
-    send(msg, room=room)
+    message = {
+        "username": username,
+        "text": text,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+    chat_history[room].append(message)
+    emit('message', message, room=room)
+
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    # Optional: remove user from room if you track user sessions
-    print(f"Client disconnected: {request.sid}")
+    sid = request.sid
+    print(f"User disconnected: {sid}")
+    # Optional: Clean up user tracking here
+    # You can emit a 'user_left' message if you store sid->username mapping
+
 
 if __name__ == '__main__':
     socketio.run(app, debug=True, port=8887)
