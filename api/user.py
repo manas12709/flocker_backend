@@ -247,3 +247,14 @@ api.add_resource(UserAPI._ID, '/id')
 api.add_resource(UserAPI._BULK_CRUD, '/users')
 api.add_resource(UserAPI._CRUD, '/user')
 api.add_resource(UserAPI._Security, '/authenticate')
+
+@user_api.route('/user', methods=['POST'])
+def create_user_simple():
+    data = request.json
+    # Add user creation logic here
+    return jsonify({"message": "User created"}), 201
+
+@user_api.route('/user', methods=['GET'])
+def get_user_simple():
+    # Add user fetching logic here
+    return jsonify({"user": "example"}), 200

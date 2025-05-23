@@ -9,6 +9,10 @@ from flask_login import current_user, login_required
 from flask import current_app
 from werkzeug.security import generate_password_hash
 import shutil
+from flask_cors import CORS
+from flask_socketio import SocketIO, join_room, leave_room, send, emit
+from collections import defaultdict
+from datetime import datetime
 
 # import "objects" from "this" project
 from __init__ import app, db, login_manager  # Key Flask objects 
@@ -26,6 +30,7 @@ from api.carphoto import car_api
 from api.carChat import car_chat_api
 
 from api.vote import vote_api
+from api.id import id_api
 # database Initialization functions
 from model.carChat import CarChat
 from model.user import User, initUsers
@@ -51,6 +56,7 @@ app.register_blueprint(nestPost_api)
 app.register_blueprint(nestImg_api)
 app.register_blueprint(vote_api)
 app.register_blueprint(car_api)
+app.register_blueprint(id_api)
 
 # Tell Flask-Login the view function name of your login route
 login_manager.login_view = "login"
@@ -224,7 +230,64 @@ def restore_data_command():
 # Register the custom command group with the Flask application
 app.cli.add_command(custom_cli)
 
+CORS(app)  # Enable CORS for all routes
+
+socketio = SocketIO(app, cors_allowed_origins="*")
+rooms_users = defaultdict(set)       # Track usernames per room
+chat_history = defaultdict(list)     # Track message history per room
+
+@socketio.on('join')
+def handle_join(data):
+    username = data.get('username')
+    room = data.get('room')
+    sid = request.sid
+
+    if not username or not room:
+        return
+
+    join_room(room)
+    rooms_users[room].add(username)
+
+    # Send chat history to new user
+    for message in chat_history[room]:
+        emit('message', message, room=sid)
+
+    # Broadcast join event
+    join_message = {
+        "username": "System",
+        "text": f"{username} has joined the room.",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    chat_history[room].append(join_message)
+    emit('message', join_message, room=room)
+    emit('user_list', list(rooms_users[room]), room=room)
+
+@socketio.on('message')
+def handle_message(data):
+    username = data.get('username')
+    room = data.get('room')
+    text = data.get('text')
+
+    if not all([username, room, text]):
+        return
+
+    message = {
+        "username": username,
+        "text": text,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+    chat_history[room].append(message)
+    emit('message', message, room=room)
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    sid = request.sid
+    print(f"User disconnected: {sid}")
+    # Optional: Clean up user tracking here
+    # You can emit a 'user_left' message if you store sid->username mapping
+
 # this runs the flask application on the development server
 if __name__ == "__main__":
     # change name for testing
-    app.run(debug=True, host="0.0.0.0", port="8887")
+    socketio.run(app, debug=True, host="0.0.0.0", port="8887")

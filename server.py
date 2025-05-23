@@ -2,8 +2,10 @@ from flask import Flask, render_template, request
 from flask_socketio import SocketIO, join_room, leave_room, send, emit
 from collections import defaultdict
 from datetime import datetime
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 rooms_users = defaultdict(set)       # Track usernames per room
